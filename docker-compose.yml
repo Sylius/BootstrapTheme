@@ -1,0 +1,114 @@
+version: '3.4'
+
+services:
+  php:
+    build:
+      args:
+        - BLACKFIRE=${BLACKFIRE:-false}
+        - PHP_VERSION=${PHP_VERSION:-7.3}
+      context: .
+      target: sylius_php
+      cache_from:
+        - quay.io/sylius-bootstrap-theme/php:latest
+        - quay.io/sylius-bootstrap-theme/nodejs:latest
+        - quay.io/sylius-bootstrap-theme/nginx:latest
+    image: quay.io/sylius-bootstrap-theme/php:latest
+    depends_on:
+      - mysql
+    environment:
+      - APP_ENV=dev
+      - APP_DEBUG=1
+      - APP_SECRET=EDITME
+      - COMPOSER_PROCESS_TIMEOUT=0
+      - DATABASE_URL=mysql://sylius:nopassword@127.0.0.1:3306/sylius
+      - MAILER_URL=smtp://127.0.0.1:1025
+      - PHP_DATE_TIMEZONE=${PHP_DATE_TIMEZONE:-UTC}
+      - BLACKFIRE_CLIENT_ID=${BLACKFIRE_CLIENT_ID}
+      - BLACKFIRE_CLIENT_TOKEN=${BLACKFIRE_CLIENT_TOKEN}
+      - BLACKFIRE_SERVER_ID=${BLACKFIRE_SERVER_ID}
+      - BLACKFIRE_SERVER_TOKEN=${BLACKFIRE_SERVER_TOKEN}
+      - SYLIUS_FIXTURES_THEME_NAME=${SYLIUS_FIXTURES_THEME_NAME}
+    volumes:
+      - .:/srv/sylius/themes/BootstrapTheme:rw
+      - public:/srv/sylius/public:rw
+      - var:/srv/sylius/var:rw
+    network_mode: host
+
+  mysql:
+    image: percona:5.7
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-nopassword}
+      - MYSQL_DATABASE=sylius
+      - MYSQL_USER=sylius
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-nopassword}
+    volumes:
+      - mysql-data:/var/lib/mysql:rw
+      # you may use a bind-mounted host directory instead, so that it is harder to accidentally remove the volume and lose all your data!
+      #- ./docker/mysql/data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    network_mode: host
+
+  nodejs:
+    build:
+      context: .
+      target: sylius_nodejs
+      cache_from:
+        - quay.io/sylius-bootstrap-theme/php:latest
+        - quay.io/sylius-bootstrap-theme/nodejs:latest
+        - quay.io/sylius-bootstrap-theme/nginx:latest
+    image: quay.io/sylius-bootstrap-theme/nodejs:latest
+    depends_on:
+      - php
+    environment:
+      - PHP_HOST=127.0.0.1
+      - PHP_PORT=9000
+    volumes:
+      - .:/srv/sylius/themes/BootstrapTheme:rw
+      - public:/srv/sylius/public:rw
+    ports:
+      - "35729:35729"
+    network_mode: host
+
+  nginx:
+    build:
+      context: .
+      target: sylius_nginx
+      cache_from:
+        - quay.io/sylius-bootstrap-theme/php:latest
+        - quay.io/sylius-bootstrap-theme/nodejs:latest
+        - quay.io/sylius-bootstrap-theme/nginx:latest
+    image: quay.io/sylius-bootstrap-theme/nginx:latest
+    depends_on:
+      - php
+      - nodejs # to ensure correct build order
+    volumes:
+      - public:/srv/sylius/public:ro
+    ports:
+      - "8080:8080"
+    network_mode: host
+
+  mailhog:
+    # do not use in production!
+    image: mailhog/mailhog:latest
+    environment:
+      - MH_STORAGE=maildir
+    # volumes:
+    #   - ./docker/mailhog/maildir:/maildir:rw,delegated
+    ports:
+      - "8025:8025"
+    network_mode: host
+
+  chrome:
+    build:
+      context: .
+      target: sylius_chrome
+    image: quay.io/sylius-bootstrap-theme/chrome:latest
+    ports:
+      - "9222:9222"
+    network_mode: host
+
+volumes:
+  mysql-data:
+  public:
+  var:
